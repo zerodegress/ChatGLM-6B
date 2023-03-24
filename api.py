@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, WebSocket
 from transformers import AutoTokenizer, AutoModel
 import uvicorn, json, datetime
 
@@ -27,8 +27,22 @@ async def create_item(request: Request):
     return answer
 
 
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    history = []
+    while True:
+        query = await websocket.receive_text()
+        last = ''
+        for res, history in model.stream_chat(tokenizer, query, history=history):
+            if res.endswith('�'):
+                continue
+            await websocket.send_text(res.removeprefix(last))
+            last = res
+
+
 if __name__ == '__main__':
-    uvicorn.run('API:app', host='0.0.0.0', port=8000, workers=1)
+    uvicorn.run('api:app', host='0.0.0.0', port=8000, workers=1)
 
 tokenizer = AutoTokenizer.from_pretrained("THUDM/chatglm-6b", trust_remote_code=True)
 model = AutoModel.from_pretrained("THUDM/chatglm_6b", trust_remote_code=True).half().cuda()
